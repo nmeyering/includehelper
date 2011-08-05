@@ -4,7 +4,7 @@ import os
 import re
 import sys
 
-def check(job, prefix, include_path):
+def check(job, prefix, include_path, quiet=False):
 	def parent(name):
 		return os.path.normpath(
 			name + '/' + os.path.pardir)
@@ -33,11 +33,6 @@ def check(job, prefix, include_path):
 		else:
 			base = parent(name)
 
-		"""
-		if not header_exists(base):
-			raise Warning('Possibly missing: ' + base + '.hpp')
-		"""
-
 		for suffix in ['.hpp', '_fwd.hpp','_decl.hpp','_impl.hpp']:
 			if base + suffix in includes:
 				return False
@@ -58,6 +53,9 @@ def check(job, prefix, include_path):
 						base + '.hpp',
 						result + '.hpp'))
 
+		if not header_exists(base): #give up
+			return False
+
 		return base + '.hpp' #header must be missing, so report this
 
 	#"absolute" C++ includes of the form: #include <foo/bar.hpp>, _NOT_ "foo/bar.hpp"!
@@ -69,17 +67,23 @@ def check(job, prefix, include_path):
 	names = re.findall(pattern = name_pattern, string = source)
 	names = set(names)
 
-	print('checking source file {}.'.format(job.name))
+	if not quiet:
+		print('checking source file {}.'.format(job.name))
 
 	messages = []
+	message_format = ' *\tMissing include: {}\n'
+	if quiet:
+		message_format = '#include <{}>'
 	for name in names:
 		rep = name.replace('::', '/') 
 		try:
 			rep = missing_include(rep)
 			if rep:
-				messages.append(' *\tMissing include: {}\n'.format(rep))
+				messages.append(
+						message_format.format(rep))
 		except Warning as w:
-			messages.append(' ?\t{}\n'.format(w))
+			if not quiet:
+				messages.append(' ?\t{}\n'.format(w))
 	
 	for msg in set(messages):
 		print(msg)
@@ -100,14 +104,18 @@ def main():
 	parser.add_argument(
 		'file',
 		type=str,
-		nargs='+',
+		nargs='*',
 		help='target file(s) you want checked')
+	parser.add_argument(
+		'-q', '--quiet',
+		action='store_true',
+		help='only output missing include statementes to be used directly in the header/source file')
 	args = parser.parse_args()
 
 	for target in args.file:
 		try:
 			with open(target) as f:
-				check(f, prefix=args.prefix[0], include_path=args.include_path[0])
+				check(f, prefix=args.prefix[0], include_path=args.include_path[0], quiet=args.quiet)
 		except IOError as e:
 			print(e)
 
