@@ -33,8 +33,10 @@ def check(job, prefix, include_path):
 		else:
 			base = parent(name)
 
+		"""
 		if not header_exists(base):
 			raise Warning('Possibly missing: ' + base + '.hpp')
+		"""
 
 		for suffix in ['.hpp', '_fwd.hpp','_decl.hpp','_impl.hpp']:
 			if base + suffix in includes:
@@ -67,29 +69,20 @@ def check(job, prefix, include_path):
 	names = re.findall(pattern = name_pattern, string = source)
 	names = set(names)
 
-	print('[' + 25 * '-')
 	print('checking source file {}.'.format(job.name))
-	print()
 
-	"""
-	for name in names:
-		print(name)
-	print()
-
-	print('Found {} names.'.format(
-		len(names)))
-	"""
-
-	#print(includes)
+	messages = []
 	for name in names:
 		rep = name.replace('::', '/') 
 		try:
 			rep = missing_include(rep)
 			if rep:
-				print(' *\tMissing include: {}\n'.format(rep))
+				messages.append(' *\tMissing include: {}\n'.format(rep))
 		except Warning as w:
-			print(' ?\t{}\n'.format(w))
-	print(25 * '-' + ']\n')
+			messages.append(' ?\t{}\n'.format(w))
+	
+	for msg in set(messages):
+		print(msg)
 
 def main():
 	parser = argparse.ArgumentParser(
