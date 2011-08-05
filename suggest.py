@@ -1,9 +1,10 @@
 #!/usr/bin/python3
+import argparse
 import os
 import re
 import sys
 
-def check(job, prefix, include_path=os.getcwd()):
+def check(job, prefix, include_path):
 	def missing_include(name):
 		if name + '.hpp' in includes:
 			return False
@@ -27,7 +28,7 @@ def check(job, prefix, include_path=os.getcwd()):
 
 	#C++ includes of the form: #include <foo/bar.hpp>, _NOT_ "foo/bar.hpp"!
 	include_pattern = re.compile(r'^\s*#include\s+<(?P<file>.+)>$', re.M)
-	name_pattern = re.compile(r'({}(?:::\w+)+)'.format(prefix), re.M)
+	name_pattern = re.compile('(' + prefix + '(?:::\\w+)+)', re.M)
 	source = job.read()
 
 	includes = re.findall(pattern = include_pattern, string = source)
@@ -55,26 +56,31 @@ def check(job, prefix, include_path=os.getcwd()):
 	print(25 * '-' + '\n')
 
 def main():
-	try:
-		with open(sys.argv[1]) as f:
-			if len(sys.argv) <= 3:
-				check(f, sys.argv[2])
-			else:
-				check(f, sys.argv[2], sys.argv[3])
-	except IndexError:
-		print_usage()
-	except IOError as e:
-		print('Could not open "{}"!'.format(sys.argv[1]))
-		print(e)
-		print_usage()
+	parser = argparse.ArgumentParser(
+		description='Try to find missing or superfluous include statements in a given header or source file.')
+	parser.add_argument(
+		'prefix',
+		type=str,
+		nargs=1,
+		help='the first part of symbols/names to look for (a.k.a. the "foo" in foo::bar::baz)')
+	parser.add_argument(
+		'include_path', 
+		type=str, 
+		nargs=1,
+		help='the path below which to look for header files ("/tmp/include" if your header paths are of the form "/tmp/include/foo/bar/baz.hpp")')
+	parser.add_argument(
+		'file',
+		type=str,
+		nargs='+',
+		help='target file(s) you want checked')
+	args = parser.parse_args()
 
-def print_usage():
-	print("""
-Usage: {} <file> [<include_path>]
-
-file: the source code or header file to be checked
-include_path: where to look for header files
-""".format(sys.argv[0]))
+	for target in args.file:
+		try:
+			with open(target) as f:
+				check(f, prefix=args.prefix[0], include_path=args.include_path)
+		except IOError as e:
+			print(e)
 
 if __name__ == '__main__':
 	main()
