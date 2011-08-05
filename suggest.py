@@ -5,32 +5,60 @@ import re
 import sys
 
 def check(job, prefix, include_path):
-	def missing_include(name):
-		tmp = os.path.join(
-			include_path,
-			name + '.hpp')
+	def parent(name):
+		return os.path.normpath(
+			name + '/' + os.path.pardir)
 
+	def header_exists(name):
+		return os.path.exists(
+			os.path.join(
+				include_path,
+				name + '.hpp'))
+
+	def combining_header(name):
+		return parent(name) +	'/' +	parent(name).split('/')[-1] + '.hpp'
+
+	def check_recursively(name):
+		if name.rstrip('/') == prefix:
+			return False
+		if combining_header(name) in includes:
+			return combining_header(name)
+		else:
+			return check_recursively(parent(name))
+
+	def missing_include(name):
 		base = ''
-		if os.path.exists(tmp):
+		if header_exists(name):
 			base = name
 		else:
-			base = os.path.normpath(
-				name + '/' + os.path.pardir)
+			base = parent(name)
 
-		if not os.path.exists(
-				os.path.join(
-					include_path,
-					base + '.hpp')):
-			raise Warning('possibly missing: ' + base + '.hpp')
+		if not header_exists(base):
+			raise Warning('Possibly missing: ' + base + '.hpp')
 
 		for suffix in ['.hpp', '_fwd.hpp','_decl.hpp','_impl.hpp']:
 			if base + suffix in includes:
 				return False
 
-		return base + '.hpp'
+		if base == name: #a/b/c.hpp exists (for a::b::c) but not included!
+			if combining_header(base) in includes:
+				raise Warning(
+					'More granular include possible:\n\t{}\tinstead of\n\t{}'.format(
+						base + '.hpp',
+						combining_header(base)))
+		else: #there might be a combining header somewhere up the file tree...
+			result = check_recursively(base)
+			if not result: #none found, still missing!
+				return base + '.hpp'
+			else: #found what seems to be a combining header
+				raise Warning(
+					'More granular include possible:\n\t{}\tinstead of\n\t{}'.format(
+						base + '.hpp',
+						result + '.hpp'))
 
+		return base + '.hpp' #header must be missing, so report this
 
-	#C++ includes of the form: #include <foo/bar.hpp>, _NOT_ "foo/bar.hpp"!
+	#"absolute" C++ includes of the form: #include <foo/bar.hpp>, _NOT_ "foo/bar.hpp"!
 	include_pattern = re.compile(r'^\s*#include\s+<(?P<file>.+)>$', re.M)
 	name_pattern = re.compile('(' + prefix + '(?:::\\w+)+)', re.M)
 	source = job.read()
@@ -51,20 +79,16 @@ def check(job, prefix, include_path):
 	print('Found {} names.'.format(
 		len(names)))
 	"""
-	print('The following includes might be missing:\n')
 
 	#print(includes)
 	for name in names:
 		rep = name.replace('::', '/') 
-
 		try:
 			rep = missing_include(rep)
+			if rep:
+				print(' *\tMissing include: {}\n'.format(rep))
 		except Warning as w:
-			print('Warning: {}.'.format(w))
-
-		if rep:
-			print(rep)
-
+			print(' ?\t{}\n'.format(w))
 	print(25 * '-' + ']\n')
 
 def main():
