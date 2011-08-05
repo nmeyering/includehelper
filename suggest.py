@@ -6,25 +6,29 @@ import sys
 
 def check(job, prefix, include_path):
 	def missing_include(name):
-		if name + '.hpp' in includes:
-			return False
-		tmp = name + '.hpp'
+		tmp = os.path.join(
+			include_path,
+			name + '.hpp')
+
+		base = ''
 		if os.path.exists(tmp):
-			return True
-		tmp =	os.path.normpath(
-			name + '/' + os.path.pardir)
-		if tmp + '.hpp' in includes:
-			return False
+			base = name
+		else:
+			base = os.path.normpath(
+				name + '/' + os.path.pardir)
+
+		if not os.path.exists(
+				os.path.join(
+					include_path,
+					base + '.hpp')):
+			raise Warning('possibly missing: ' + base + '.hpp')
+
 		for suffix in ['.hpp', '_fwd.hpp','_decl.hpp','_impl.hpp']:
-			if tmp + suffix in includes:
+			if base + suffix in includes:
 				return False
-			if os.path.exists(tmp + suffix): #(and _not_ in includes)
-				return True
-		"""
-		if not os.path.exists(tmp + '.hpp'):
-			raise Exception("Missing header file for " + name)
-		"""
-		return True
+
+		return base + '.hpp'
+
 
 	#C++ includes of the form: #include <foo/bar.hpp>, _NOT_ "foo/bar.hpp"!
 	include_pattern = re.compile(r'^\s*#include\s+<(?P<file>.+)>$', re.M)
@@ -35,25 +39,33 @@ def check(job, prefix, include_path):
 	names = re.findall(pattern = name_pattern, string = source)
 	names = set(names)
 
-	print(25 * '-')
+	print('[' + 25 * '-')
 	print('checking source file {}.'.format(job.name))
-	print(25 * '-' + '\n')
+	print()
 
+	"""
 	for name in names:
 		print(name)
 	print()
 
 	print('Found {} names.'.format(
 		len(names)))
+	"""
 	print('The following includes might be missing:\n')
 
 	#print(includes)
 	for name in names:
 		rep = name.replace('::', '/') 
-		if missing_include(rep):
-			print("#include <{}.hpp>".format(rep))
 
-	print(25 * '-' + '\n')
+		try:
+			rep = missing_include(rep)
+		except Warning as w:
+			print('Warning: {}.'.format(w))
+
+		if rep:
+			print(rep)
+
+	print(25 * '-' + ']\n')
 
 def main():
 	parser = argparse.ArgumentParser(
@@ -78,7 +90,7 @@ def main():
 	for target in args.file:
 		try:
 			with open(target) as f:
-				check(f, prefix=args.prefix[0], include_path=args.include_path)
+				check(f, prefix=args.prefix[0], include_path=args.include_path[0])
 		except IOError as e:
 			print(e)
 
