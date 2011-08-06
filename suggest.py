@@ -11,7 +11,7 @@ class Complaint:
 	def alt(self):
 		return bool(self.insteadof)
 
-def check(job, prefix, include_path, quiet=False):
+def check(job, prefix, include_path, quiet=False, reverse=False):
 	def parent(name):
 		return os.path.normpath(
 			name + '/' + os.path.pardir)
@@ -82,14 +82,16 @@ def check(job, prefix, include_path, quiet=False):
 			header = m.group('file')
 			if header in includes:
 				print("Duplicate header file detected! ({}.hpp)".format(header), file=sys.stderr)
-			includes.add(header)
+			if header.startswith(prefix + '/'):
+				includes.add(header)
 		line_no += 1
 	
 	if not quiet:
 		print('checking source file {}.'.format(job.name))
 
-	message_format = '{filename}:{row}:{col} warning: expected {header}.hpp to be included because of {name}\n'
-	alt_message_format = '{filename}:{row}:{col} warning: including {alt} instead of {header}.hpp would be more specific for {name}\n'
+	base_format = '{filename}:{row}:{col} warning: '
+	message_format = base_format + 'expected {header}.hpp to be included because of {name}'
+	alt_message_format = base_format + 'including {header}.hpp instead of {alt} would be more specific for {name}'
 	quiet_format = '#include <{}.hpp>'
 
 	messages = []
@@ -156,10 +158,7 @@ def main():
 	for target in args.file:
 		try:
 			with open(target) as f:
-				if args.reverse:
-					pass
-				else:
-					check(f, prefix=args.prefix[0], include_path=args.include_path[0], quiet=args.quiet)
+				check(f, prefix=args.prefix[0], include_path=args.include_path[0], quiet=args.quiet, reverse=args.reverse)
 		except IOError as e:
 			print(e)
 
