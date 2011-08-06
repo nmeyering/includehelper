@@ -46,17 +46,19 @@ def check(job, prefix, include_path, quiet=False):
 		else: #there might be a combining header somewhere up the file tree...
 			result = check_recursively(base)
 			if not result: #none found, still missing!
-				return base + '.hpp'
+				ret = base
 			else: #found what seems to be a combining header
 				raise Warning(
 					'More granular include possible:\n\t{}\tinstead of\n\t{}'.format(
 						base + '.hpp',
 						result + '.hpp'))
 
-		if not header_exists(base): #give up
+		ret = base #header must be missing, so report this
+
+		if not header_exists(ret): #give up
 			return False
 
-		return base + '.hpp' #header must be missing, so report this
+		return ret
 
 	#"absolute" C++ includes of the form: #include <foo/bar.hpp>, _NOT_ "foo/bar.hpp"!
 	include_pattern = re.compile(r'^\s*#include\s+<(?P<file>.+)>$', re.M)
@@ -104,18 +106,25 @@ def main():
 	parser.add_argument(
 		'file',
 		type=str,
-		nargs='*',
+		nargs='+',
 		help='target file(s) you want checked')
 	parser.add_argument(
 		'-q', '--quiet',
 		action='store_true',
 		help='only output missing include statementes to be used directly in the header/source file')
+	parser.add_argument(
+		'-r', '--reverse',
+		action='store_true',
+		help='instead of checking for missing headers, check if any existing ones can be removed')
 	args = parser.parse_args()
 
 	for target in args.file:
 		try:
 			with open(target) as f:
-				check(f, prefix=args.prefix[0], include_path=args.include_path[0], quiet=args.quiet)
+				if args.reverse:
+					pass
+				else:
+					check(f, prefix=args.prefix[0], include_path=args.include_path[0], quiet=args.quiet)
 		except IOError as e:
 			print(e)
 
