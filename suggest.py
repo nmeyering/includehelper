@@ -4,6 +4,13 @@ import os
 import re
 import sys
 
+class Complaint:
+	def __init__(self, header, insteadof=None):
+		self.header = header
+		self.insteadof = insteadof
+	def alt(self):
+		return bool(self.insteadof)
+
 def check(job, prefix, include_path, quiet=False):
 	def parent(name):
 		return os.path.normpath(
@@ -39,55 +46,83 @@ def check(job, prefix, include_path, quiet=False):
 
 		if base == name: #a/b/c.hpp exists (for a::b::c) but not included!
 			if combining_header(base) in includes:
-				raise Warning(
-					'More granular include possible:\n\t{}\tinstead of\n\t{}'.format(
-						base + '.hpp',
-						combining_header(base)))
+				return Complaint(header=base, insteadof=combining_header(base))
 		else: #there might be a combining header somewhere up the file tree...
 			result = check_recursively(base)
 			if not result: #none found, still missing!
 				ret = base
 			else: #found what seems to be a combining header
-				raise Warning(
-					'More granular include possible:\n\t{}\tinstead of\n\t{}'.format(
-						base + '.hpp',
-						result + '.hpp'))
+				return Complaint(header=base, insteadof=result)
 
 		ret = base #header must be missing, so report this
 
 		if not header_exists(ret): #give up
 			return False
 
-		return ret
+		return Complaint(header=ret)
 
 	#"absolute" C++ includes of the form: #include <foo/bar.hpp>, _NOT_ "foo/bar.hpp"!
 	include_pattern = re.compile(r'^\s*#include\s+<(?P<file>.+)>$', re.M)
 	name_pattern = re.compile('(' + prefix + '(?:::\\w+)+)', re.M)
-	source = job.read()
+	source_lines = job.readlines()
 
-	includes = re.findall(pattern = include_pattern, string = source)
-	names = re.findall(pattern = name_pattern, string = source)
-	names = set(names)
+	includes = set()
+	nameset = set()
+	names = []
 
+	line_no = 1
+	for line in source_lines:
+		for match in re.finditer(pattern = name_pattern, string = line):
+			if not match.group() in nameset:
+				nameset.add(match.group())
+				names.append(
+					{"row":line_no, "col":match.start(), "text":match.group()})
+		m = re.match(pattern = include_pattern, string = line)
+		if m:
+			header = m.group('file')
+			if header in includes:
+				print("Duplicate header file detected! ({}.hpp)".format(header), file=sys.stderr)
+			includes.add(header)
+		line_no += 1
+	
 	if not quiet:
 		print('checking source file {}.'.format(job.name))
 
+	message_format = '{filename}:{row}:{col} warning: expected {header}.hpp to be included because of {name}\n'
+	alt_message_format = '{filename}:{row}:{col} warning: including {alt} instead of {header}.hpp would be more specific for {name}\n'
+	quiet_format = '#include <{}.hpp>'
+
 	messages = []
-	message_format = ' *\tMissing include: {}\n'
-	if quiet:
-		message_format = '#include <{}>'
-	for name in names:
-		rep = name.replace('::', '/') 
-		try:
-			rep = missing_include(rep)
-			if rep:
+	for occur in names:
+		rep = occur['text'].replace('::', '/') 
+		complaint = missing_include(rep)
+		if complaint:
+			if quiet:
 				messages.append(
-						message_format.format(rep))
-		except Warning as w:
-			if not quiet:
-				messages.append(' ?\t{}\n'.format(w))
-	
-	for msg in set(messages):
+					quiet_format.format(
+						complaint.header))
+			else:
+				if complaint.alt():
+					messages.append(
+						alt_message_format.format(
+							filename=job.name,
+							row=occur['row'],
+							col=occur['col'],
+							alt=complaint.insteadof,
+							header=complaint.header,
+							name=occur['text']))
+				else:
+					messages.append(
+						message_format.format(
+							filename=job.name,
+							row=occur['row'],
+							col=occur['col'],
+							header=complaint.header,
+							name=occur['text']))
+
+	if quiet:
+		messages.sort()
+	for msg in messages:
 		print(msg)
 
 def main():
