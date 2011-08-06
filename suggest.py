@@ -33,6 +33,17 @@ def check(job, prefix, include_path, quiet=False, reverse=False):
 		else:
 			return check_recursively(parent(name))
 
+	def redundant_include(include):
+		parts = include.split('::')
+		first_parts = include[0:include.rfind('::')]
+		for name in nameset:
+			if name.startswith(include):
+				return False
+			if len(parts) > 2 and parts[-1] == parts[-2] and name.startswith(
+				first_parts): #smart!
+				return False
+		return True
+
 	def missing_include(name):
 		base = ''
 		if header_exists(name):
@@ -92,35 +103,52 @@ def check(job, prefix, include_path, quiet=False, reverse=False):
 	base_format = '{filename}:{row}:{col} warning: '
 	message_format = base_format + 'expected {header}.hpp to be included because of {name}'
 	alt_message_format = base_format + 'including {header}.hpp instead of {alt} would be more specific for {name}'
+	redundant_format = base_format + '{include} appears to be unused'
 	quiet_format = '#include <{}.hpp>'
 
 	messages = []
-	for occur in names:
-		rep = occur['text'].replace('::', '/') 
-		complaint = missing_include(rep)
-		if complaint:
-			if quiet:
-				messages.append(
-					quiet_format.format(
-						complaint.header))
-			else:
-				if complaint.alt():
-					messages.append(
-						alt_message_format.format(
-							filename=job.name,
-							row=occur['row'],
-							col=occur['col'],
-							alt=complaint.insteadof,
-							header=complaint.header,
-							name=occur['text']))
+	if reverse:
+		for include in includes:
+			include = include.rstrip('.hpp')
+			rep = include.replace('/', '::')
+			complaint = redundant_include(rep)
+			if complaint:
+				if quiet:
+					messages.append(quiet_format.format(include))
 				else:
 					messages.append(
-						message_format.format(
+						redundant_format.format(
 							filename=job.name,
-							row=occur['row'],
-							col=occur['col'],
-							header=complaint.header,
-							name=occur['text']))
+							row=0,
+							col=0,
+							include=include))
+	else:
+		for occur in names:
+			rep = occur['text'].replace('::', '/') 
+			complaint = missing_include(rep)
+			if complaint:
+				if quiet:
+					messages.append(
+						quiet_format.format(
+							complaint.header))
+				else:
+					if complaint.alt():
+						messages.append(
+							alt_message_format.format(
+								filename=job.name,
+								row=occur['row'],
+								col=occur['col'],
+								alt=complaint.insteadof,
+								header=complaint.header,
+								name=occur['text']))
+					else:
+						messages.append(
+							message_format.format(
+								filename=job.name,
+								row=occur['row'],
+								col=occur['col'],
+								header=complaint.header,
+								name=occur['text']))
 
 	if quiet:
 		messages.sort()
