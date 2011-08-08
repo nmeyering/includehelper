@@ -97,8 +97,10 @@ def check(job, prefix, include_path, quiet=False, reverse=False):
 				includes.add(header)
 		line_no += 1
 	
+	"""
 	if not quiet:
 		print('checking source file {}.'.format(job.name))
+	"""
 
 	base_format = '{filename}:{row}:{col} warning: '
 	message_format = base_format + 'expected {header}.hpp to be included because of {name}'
@@ -107,6 +109,8 @@ def check(job, prefix, include_path, quiet=False, reverse=False):
 	quiet_format = '#include <{}.hpp>'
 
 	messages = []
+	messageset = set()
+
 	if reverse:
 		for include in includes:
 			include = include.rstrip('.hpp')
@@ -126,7 +130,8 @@ def check(job, prefix, include_path, quiet=False, reverse=False):
 		for occur in names:
 			rep = occur['text'].replace('::', '/') 
 			complaint = missing_include(rep)
-			if complaint:
+			if complaint and not complaint.header in messageset:
+				messageset.add(complaint.header)
 				if quiet:
 					messages.append(
 						quiet_format.format(
