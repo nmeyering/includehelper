@@ -91,7 +91,7 @@ def check(job, prefix, include_path, quiet=False, reverse=False):
 		m = re.match(pattern = include_pattern, string = line)
 		if m:
 			header = m.group('file')
-			if header in includes:
+			if header in includes and not quiet:
 				print("Duplicate header file detected! ({}.hpp)".format(header), file=sys.stderr)
 			if header.startswith(prefix + '/'):
 				includes.add(header)
